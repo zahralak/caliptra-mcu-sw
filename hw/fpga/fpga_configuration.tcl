@@ -374,6 +374,10 @@ set_property STEPS.SYNTH_DESIGN.ARGS.GATED_CLOCK_CONVERSION $GATED_CLOCK_CONVERS
 file copy $fpgaDir/src/ddr4_constraints.xdc $outputDir/ddr4_constraints.xdc
 add_files -fileset constrs_1 $outputDir/ddr4_constraints.xdc
 
+# Add CDC (Clock Domain Crossing) timing constraints
+file copy $fpgaDir/src/cdc_constraints.xdc $outputDir/cdc_constraints.xdc
+add_files -fileset constrs_1 $outputDir/cdc_constraints.xdc
+
 # Xilinx I3C requires that the AXI clock be > 14 * SCL_CLK_FREQ. This needs to be set late in the script so that Vivado recognizes the higher AXI clock.
 set_property CONFIG.SCL_CLK_FREQ "$I3C_SCL_RATE_KHZ" [get_bd_cells xilinx_i3c_0]
 

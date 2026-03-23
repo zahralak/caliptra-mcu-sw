@@ -45,3 +45,11 @@ set_property ASYNC_REG TRUE [get_cells -quiet -hierarchical -filter {NAME =~ */s
 # 5 (out of 15) is a reasonable estimate for this design's moderate memory
 # access patterns.
 set_property USER_RAM_AVERAGE_ACTIVITY 5 [current_design]
+
+# =============================================================================
+# 4. Thermal operating conditions
+# =============================================================================
+# Without these, Vivado assumes worst-case Tj=100C which inflates static power
+# estimates. Setting realistic conditions gives accurate power reports.
+set_operating_conditions -ambient_temp 25
+set_operating_conditions -thetaja 1.0

@@ -1,21 +1,21 @@
 18a19,21
 > // README
 > // TODO: Copying this file from the caliptra-ss repo is bad. Issue to track resolution: https://github.com/chipsalliance/caliptra-mcu-sw/issues/373
->
+> 
 24a28,31
 > `include "css_mcu0_common_defines.vh"
->
+> 
 > // Trying to avoid compile error in css_mcu0_el2_param.vh. This worked in caliptra_ss_top but this would be better.
 > `include "css_mcu0_el2_pdef.vh"
 39a47,48
 >     // TODO: Hacking in this i3c clock
 >     input logic cptra_i3c_clk_i,
-363d371
+365d373
 <     logic cptra_in_debug_mode;
-561,562d568
+563,564d570
 <     assign cptra_in_debug_mode = !mci_cptra_security_state.debug_locked; // Debug mode if not locked
-<
-878a885,920
+< 
+880a887,897
 >     // CDC: Synchronize reset from SS clock domain to I3C clock domain
 >     // Reset asserts asynchronously, deasserts synchronously to cptra_i3c_clk_i
 >     logic i3c_rst_sync;
@@ -27,7 +27,7 @@
 >         .arst      (cptra_ss_rst_b_o),
 >         .arst_sync (i3c_rst_sync)
 >     );
->
+881a899,926
 >     // CDC: I3C CLK -> SS CLK (5-bit: recovery/reset/irq status signals)
 >     logic cptra_ss_i3c_recovery_payload_available_o_presync;
 >     logic cptra_ss_i3c_recovery_image_activated_o_presync;
@@ -42,7 +42,7 @@
 >         .din  ({cptra_ss_i3c_recovery_payload_available_o_presync, cptra_ss_i3c_recovery_image_activated_o_presync, i3c_peripheral_reset_presync, i3c_escalated_reset_presync, i3c_irq_o_presync}),
 >         .dout ({cptra_ss_i3c_recovery_payload_available_o,         cptra_ss_i3c_recovery_image_activated_o,         i3c_peripheral_reset,         i3c_escalated_reset,         i3c_irq_o})
 >     );
-879a922,939
+> 
 >     // CDC: SS CLK -> I3C CLK (65-bit: AXI user straps + ID filtering config)
 >     // These are quasi-static configuration signals set once at boot.
 >     logic [31:0]  cptra_ss_strap_caliptra_dma_axi_user_i_synch;
@@ -56,19 +56,19 @@
 >         .din  ({cptra_ss_strap_caliptra_dma_axi_user_i,       cptra_ss_strap_mcu_lsu_axi_user_i,       disable_id_filtering_i}),
 >         .dout ({cptra_ss_strap_caliptra_dma_axi_user_i_synch, cptra_ss_strap_mcu_lsu_axi_user_i_synch, disable_id_filtering_i_synch})
 >     );
-883,884c943,944
+885,886c930,931
 <     assign priv_ids[2] = cptra_ss_strap_caliptra_dma_axi_user_i;
 <     assign priv_ids[3] = cptra_ss_strap_mcu_lsu_axi_user_i;
 ---
 >     assign priv_ids[2] = cptra_ss_strap_caliptra_dma_axi_user_i_synch;
 >     assign priv_ids[3] = cptra_ss_strap_mcu_lsu_axi_user_i_synch;
-894,895c954,955
+896,897c941,942
 <         .clk_i                          (cptra_ss_clk_i),
 <         .rst_ni                         (cptra_ss_rst_b_o),
 ---
 >         .clk_i (cptra_i3c_clk_i),
 >         .rst_ni(i3c_rst_sync),
-954,958c1014,1018
+956,960c1001,1005
 <         .recovery_payload_available_o   (cptra_ss_i3c_recovery_payload_available_o),
 <         .recovery_image_activated_o     (cptra_ss_i3c_recovery_image_activated_o),
 <         .peripheral_reset_o             (i3c_peripheral_reset),
@@ -80,13 +80,13 @@
 >         .peripheral_reset_o(i3c_peripheral_reset_presync),
 >         .peripheral_reset_done_i(1'b1),
 >         .escalated_reset_o(i3c_escalated_reset_presync),
-961c1021
+963c1008
 <         .irq_o                          (i3c_irq_o),
 ---
 >         .irq_o                          (i3c_irq_o_presync),
-964c1024
+966c1011
 <         .disable_id_filtering_i         (disable_id_filtering_i),
 ---
 >         .disable_id_filtering_i         (disable_id_filtering_i_synch),
-1241d1300
+1245d1289
 <         .cptra_in_debug_mode_i      (cptra_in_debug_mode),

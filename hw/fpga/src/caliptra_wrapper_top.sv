@@ -2009,7 +2009,7 @@ mcu_rom (
     ) i3c (
         .clk_i                          (i3c_clk),
         .rst_ni                         (axi_reset),
-    
+
         // Read Address Channel
         .arvalid_i   (S_AXI_I3C_SPARE_ARVALID),
         .arready_o   (S_AXI_I3C_SPARE_ARREADY),
@@ -2054,7 +2054,7 @@ mcu_rom (
         .bresp_o     (S_AXI_I3C_SPARE_BRESP),
         .bid_o       (S_AXI_I3C_SPARE_BID),
         .buser_o     (/* ??? see note below */),
-    
+
         // I3C Signals
         .scl_i                          (spare_i3c_core_scl),
         .sda_i                          (SDA),
@@ -2062,7 +2062,7 @@ mcu_rom (
         .sda_o                          (spare_i3c_core_sda_o),
         .scl_oe                         (),
         .sda_oe                         (),
-    
+
         // Additional signals
         .sel_od_pp_o                    (spare_i3c_core_sel_od_pp_o),
 
@@ -2077,7 +2077,7 @@ mcu_rom (
 
         // id filtering
         .disable_id_filtering_i         (1'b1),
-        .priv_ids_i                     (priv_ids)    
+        .priv_ids_i                     (priv_ids)
     );
 
 // Looping back resets
@@ -2296,7 +2296,7 @@ caliptra_ss_top #(
 
     // LC Clock bypass not interesting for FPGA. Tie to Off so that LC transitions work.
     .cptra_ss_lc_clk_byp_ack_i(lc_ctrl_pkg::Off),
-    .cptra_ss_lc_clk_byp_req_o(lc_ctrl_pkg::Off),
+    .cptra_ss_lc_clk_byp_req_o(/*lc_ctrl_pkg::Off*/),
     .cptra_ss_lc_ctrl_scan_rst_ni_i(1'b1),
 
     .cptra_ss_lc_esclate_scrap_state0_i(hwif_out.interface_regs.mcu_config.cptra_ss_lc_esclate_scrap_state0_i.value),   // NOTE: These two signals are very important. FIXME: Renaming is needed

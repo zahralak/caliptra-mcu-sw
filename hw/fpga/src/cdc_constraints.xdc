@@ -30,12 +30,20 @@ set_clock_groups -asynchronous \
 # is missing on some instances. This ensures Vivado places the synchronizer
 # flip-flops in the same slice and does not optimize them away.
 #
-# Target the caliptra_ss_top CDC instances (xpm_cdc_i3c_rst, xpm_cdc_i3c_outputs, xpm_cdc_i3c_inputs)
-# and any sync_regs instances.
-set_property ASYNC_REG TRUE [get_cells -quiet -hierarchical -filter {NAME =~ */xpm_cdc_*/gen_*.u_impl_xilinx/q_o_reg*}]
-set_property ASYNC_REG TRUE [get_cells -quiet -hierarchical -filter {NAME =~ */xpm_cdc_*/*graysync_ff_reg*}]
-set_property ASYNC_REG TRUE [get_cells -quiet -hierarchical -filter {NAME =~ */xpm_cdc_*/*arststages_ff_reg*}]
-set_property ASYNC_REG TRUE [get_cells -quiet -hierarchical -filter {NAME =~ */sync_regs/*/q_o_reg*}]
+# Target the caliptra_ss_top CDC instances and any sync_regs/reset_synchronizer instances.
+# Guard each set_property with a length check to avoid warnings on empty cell lists.
+foreach pattern {
+    {*/xpm_cdc_*/gen_*.u_impl_xilinx/q_o_reg*}
+    {*/xpm_cdc_*/*graysync_ff_reg*}
+    {*/xpm_cdc_*/*arststages_ff_reg*}
+    {*/sync_regs/*/q_o_reg*}
+    {*/reset_synchronizer/*/arststages_ff_reg*}
+} {
+    set cells [get_cells -quiet -hierarchical -filter "NAME =~ $pattern"]
+    if {[llength $cells] > 0} {
+        set_property ASYNC_REG TRUE $cells
+    }
+}
 
 # =============================================================================
 # 3. Reduce pessimistic RAM switching activity estimate

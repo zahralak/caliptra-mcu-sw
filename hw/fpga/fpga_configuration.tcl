@@ -118,9 +118,6 @@ set xdc_fd [ open $outputDir/jtag_constraints.xdc w ]
 puts $xdc_fd {create_clock -period 5000.000 -name {cal_jtag_clk} -waveform {0.000 2500.000} [get_pins {caliptra_fpga_project_bd_i/ps_0/inst/pspmc_0/inst/PS9_inst/EMIOGPIO2O[0]}]}
 puts $xdc_fd {create_clock -period 5000.000 -name {lcc_jtag_clk} -waveform {0.000 2500.000} [get_pins {caliptra_fpga_project_bd_i/ps_0/inst/pspmc_0/inst/PS9_inst/EMIOGPIO2O[5]}]}
 puts $xdc_fd {create_clock -period 5000.000 -name {mcu_jtag_clk} -waveform {0.000 2500.000} [get_pins {caliptra_fpga_project_bd_i/ps_0/inst/pspmc_0/inst/PS9_inst/EMIOGPIO2O[10]}]}
-puts $xdc_fd {set_clock_groups -asynchronous -group [get_clocks {cal_jtag_clk}]}
-puts $xdc_fd {set_clock_groups -asynchronous -group [get_clocks {lcc_jtag_clk}]}
-puts $xdc_fd {set_clock_groups -asynchronous -group [get_clocks {mcu_jtag_clk}]}
 puts $xdc_fd {set_false_path -from [get_clocks {clk_pl_0}] -to [get_clocks {cal_jtag_clk}]}
 puts $xdc_fd {set_false_path -from [get_clocks {clk_pl_0}] -to [get_clocks {lcc_jtag_clk}]}
 puts $xdc_fd {set_false_path -from [get_clocks {clk_pl_0}] -to [get_clocks {mcu_jtag_clk}]}
@@ -205,7 +202,7 @@ set_property -dict [list \
 create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 staging_sram_bram_ctrl_0
 set_property CONFIG.SINGLE_PORT_BRAM {1} [get_bd_cells staging_sram_bram_ctrl_0]
 create_bd_cell -type ip -vlnv xilinx.com:ip:emb_mem_gen:1.0 staging_sram_emb_mem_gen_0
-set_property CONFIG.MEMORY_DEPTH {65636} [get_bd_cells staging_sram_emb_mem_gen_0]
+set_property CONFIG.MEMORY_DEPTH {65536} [get_bd_cells staging_sram_emb_mem_gen_0]
 connect_bd_intf_net [get_bd_intf_pins staging_sram_bram_ctrl_0/BRAM_PORTA] [get_bd_intf_pins staging_sram_emb_mem_gen_0/BRAM_PORTA]
 create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 ilconstant_0
 connect_bd_net [get_bd_pins ilconstant_0/dout] [get_bd_pins staging_sram_emb_mem_gen_0/regcea]

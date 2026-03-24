@@ -467,9 +467,6 @@ if {$BUILD} {
   set time_finish_synth [clock clicks -millisec]
 
   set time_start_impl [clock clicks -millisec]
-  # Merge low-fanout control sets during opt_design to reduce slice fragmentation.
-  # The design has 1572 control sets with fanout < 4 at 94% slice utilization.
-  set_property {STEPS.OPT_DESIGN.ARGS.MORE OPTIONS} {-merge_equivalent_drivers -control_set_merge} [get_runs impl_1]
   launch_runs impl_1 -to_step write_device_image -jobs 32
   wait_on_runs impl_1
   set time_finish_impl [clock clicks -millisec]

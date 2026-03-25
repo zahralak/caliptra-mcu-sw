@@ -87,6 +87,8 @@ pub struct McuRootBusArgs {
     pub uart_output: Option<Rc<RefCell<Vec<u8>>>>,
     pub uart_rx: Option<Arc<Mutex<Option<u8>>>>,
     pub offsets: McuRootBusOffsets,
+    pub allow_sideloaded_rom: bool,
+    pub straps: mcu_config::McuStraps,
 }
 
 pub struct McuRootBus {
@@ -104,6 +106,8 @@ pub struct McuRootBus {
     pub mci_irq: Rc<RefCell<Irq>>,
     event_sender: Option<mpsc::Sender<Event>>,
     offsets: McuRootBusOffsets,
+    allow_sideloaded_rom: bool,
+    pub straps: mcu_config::McuStraps,
 }
 
 impl McuRootBus {
@@ -145,9 +149,53 @@ impl McuRootBus {
             dot_flash: Rc::new(RefCell::new(dot_flash)),
             offsets: args.offsets,
             mci_irq: Rc::new(RefCell::new(mci_irq)),
+            allow_sideloaded_rom: args.allow_sideloaded_rom,
             mcu_mailbox0,
             mcu_mailbox1,
+            straps: args.straps,
         })
+    }
+
+    fn write_rom_when_idle(
+        &mut self,
+        size: RvSize,
+        addr: RvAddr,
+        val: RvData,
+    ) -> Result<(), BusError> {
+        let offset = addr as usize;
+        let data = self.rom.data_mut();
+
+        match size {
+            RvSize::Byte => {
+                if offset < data.len() {
+                    data[offset] = val as u8;
+                    Ok(())
+                } else {
+                    Err(BusError::StoreAccessFault)
+                }
+            }
+            RvSize::HalfWord => {
+                if offset + 1 < data.len() {
+                    data[offset] = (val & 0xff) as u8;
+                    data[offset + 1] = ((val >> 8) & 0xff) as u8;
+                    Ok(())
+                } else {
+                    Err(BusError::StoreAccessFault)
+                }
+            }
+            RvSize::Word => {
+                if offset + 3 < data.len() {
+                    data[offset] = (val & 0xff) as u8;
+                    data[offset + 1] = ((val >> 8) & 0xff) as u8;
+                    data[offset + 2] = ((val >> 16) & 0xff) as u8;
+                    data[offset + 3] = ((val >> 24) & 0xff) as u8;
+                    Ok(())
+                } else {
+                    Err(BusError::StoreAccessFault)
+                }
+            }
+            RvSize::Invalid => Err(BusError::StoreAccessFault),
+        }
     }
 
     pub fn load_ram(&mut self, offset: usize, data: &[u8]) {
@@ -229,7 +277,12 @@ impl Bus for McuRootBus {
     fn write(&mut self, size: RvSize, addr: RvAddr, val: RvData) -> Result<(), BusError> {
         if addr >= self.offsets.rom_offset && addr < self.offsets.rom_offset + self.offsets.rom_size
         {
-            return self.rom.write(size, addr - self.offsets.rom_offset, val);
+            let relative_addr = addr - self.offsets.rom_offset;
+            if self.allow_sideloaded_rom {
+                return self.write_rom_when_idle(size, relative_addr, val);
+            }
+
+            return self.rom.write(size, relative_addr, val);
         }
         if addr >= self.offsets.uart_offset
             && addr < self.offsets.uart_offset + self.offsets.uart_size
@@ -409,7 +462,7 @@ impl Bus for McuRootBus {
                         .read_mcu_mbox0_csr_mbox_sram(index)
                 });
                 let data: Vec<u8> = data
-                    .flat_map(|val| val.to_be_bytes().to_vec())
+                    .flat_map(|val| val.to_le_bytes().to_vec())
                     .take(len)
                     .collect();
 
@@ -447,7 +500,7 @@ impl Bus for McuRootBus {
                         .read_mcu_mbox0_csr_mbox_sram(index.div_ceil(4))
                 });
                 let data: Vec<u8> = data
-                    .flat_map(|val| val.to_be_bytes().to_vec())
+                    .flat_map(|val| val.to_le_bytes().to_vec())
                     .take(len)
                     .collect();
 
@@ -483,16 +536,7 @@ impl Bus for McuRootBus {
                 let data = ram.data()[start..start + len].to_vec();
 
                 // Caliptra DMA processes the data in 4-byte chunks
-                let data: Vec<u8> = data
-                    .chunks(4)
-                    .flat_map(|chunk| {
-                        if chunk.len() == 4 {
-                            chunk.iter().rev().cloned().collect::<Vec<u8>>()
-                        } else {
-                            chunk.to_vec()
-                        }
-                    })
-                    .collect();
+                let data: Vec<u8> = data.chunks(4).flat_map(|chunk| chunk.to_vec()).collect();
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender

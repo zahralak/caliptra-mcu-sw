@@ -258,6 +258,21 @@ impl McuError {
             "OTP SW digest readback verification failed"
         ),
         (
+            ROM_OTP_READ_CPTRA_ITRNG_WINDOW_SIZE_ERROR,
+            0x3_000d,
+            "Failed to read CPTRA_ITRNG_WINDOW_SIZE from OTP"
+        ),
+        (
+            ROM_OTP_READ_CPTRA_ITRNG_CONFIG0_ERROR,
+            0x3_000e,
+            "Failed to read CPTRA_ITRNG_ENTROPY_CONFIG_0 from OTP"
+        ),
+        (
+            ROM_OTP_READ_CPTRA_ITRNG_CONFIG1_ERROR,
+            0x3_000f,
+            "Failed to read CPTRA_ITRNG_ENTROPY_CONFIG_1 from OTP"
+        ),
+        (
             ROM_I3C_CONFIG_RING_HEADER_ERROR,
             0x4_0000,
             "I3C config ring header error"
@@ -351,6 +366,21 @@ impl McuError {
             ROM_SOC_SS_CONFIG_DONE_VERIFY_FAILED,
             0x5_0010,
             "SS_CONFIG_DONE or SS_CONFIG_DONE_STICKY verification failed after setting"
+        ),
+        (
+            ROM_SOC_ICCM_ECC_UNC,
+            0x5_0011,
+            "ICCM uncorrectable ECC error"
+        ),
+        (
+            ROM_SOC_DCCM_ECC_UNC,
+            0x5_0012,
+            "DCCM uncorrectable ECC error"
+        ),
+        (
+            ROM_BOOTFSM_TIMEOUT,
+            0x5_0011,
+            "Caliptra Core boot FSM timed out"
         ),
         (
             GENERIC_EXCEPTION,

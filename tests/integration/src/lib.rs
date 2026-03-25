@@ -5,6 +5,7 @@ mod i3c_socket;
 mod jtag;
 #[cfg(test)]
 mod rom;
+mod test_active_i3c;
 mod test_bare_metal;
 mod test_dot;
 mod test_exception_handler;
@@ -13,6 +14,8 @@ mod test_fpga_flash_ctrl;
 mod test_i3c_constant_writes;
 mod test_i3c_simple;
 mod test_mctp_capsule_loopback;
+mod test_mctp_spdm_attestation;
+mod test_mctp_spdm_responder_conformance;
 mod test_mctp_vdm_cmds;
 mod test_mcu_mbox;
 mod test_pldm_fw_update;
@@ -69,6 +72,7 @@ mod test {
         pub flash_boot: bool,
         /// ROM feature flag. If set, compiles a ROM with this feature enabled.
         pub rom_feature: Option<&'a str>,
+        pub active_i3c1: bool,
     }
 
     static PROJECT_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -131,9 +135,12 @@ mod test {
         } else {
             feature
         };
-        let output: PathBuf =
-            mcu_builder::rom_build(Some(platform().to_string()), Some(feature.to_string()))
-                .expect("ROM build failed");
+        let output: PathBuf = mcu_builder::rom_build(
+            Some(platform().to_string()),
+            Some(feature.to_string()),
+            None,
+        )
+        .expect("ROM build failed");
         assert!(output.exists());
         output
     }
@@ -156,6 +163,7 @@ mod test {
             Some(name),
             example_app,
             Some(platform),
+            None,
             None,
         )
         .expect("Runtime failed to compile");
@@ -367,6 +375,7 @@ mod test {
             otp_memory: otp_memory.as_deref(),
             primary_flash_initial_contents: flash_image,
             flash_boot: params.flash_boot,
+            active_i3c1: params.active_i3c1,
             ..Default::default()
         })
         .unwrap()
@@ -390,6 +399,7 @@ mod test {
         i3c_port: String,
         active_mode: bool,
         device_security_state: DeviceLifecycle,
+
         soc_images: Option<Vec<ImageCfg>>,
         streaming_boot_package_path: Option<PathBuf>,
         primary_flash_image_path: Option<PathBuf>,
@@ -413,6 +423,8 @@ mod test {
             runtime_path_str,
             "--i3c-port".to_string(),
             i3c_port.clone(),
+            "--test-feature".to_string(),
+            feature.to_string(),
         ];
 
         // map the memory map to the emulator
@@ -601,8 +613,6 @@ mod test {
                 "emulator".to_string(),
                 "--profile".to_string(),
                 "test".to_string(),
-                "--features".to_string(),
-                feature.to_string(),
                 "--".to_string(),
             ];
             cargo_args.extend(emulator_args);
@@ -617,10 +627,10 @@ mod test {
     /// Uses the CPTRA_EMULATOR_BUNDLE environment variable.
     fn get_prebuilt_emulator(feature: &str) -> Option<PathBuf> {
         let binaries = EmulatorBinaries::from_env().ok()?;
-        let emulator_bytes = binaries.emulator(feature).ok()?;
+        let emulator_bytes = binaries.emulator().ok()?;
 
         // Write prebuilt emulator to target directory
-        let output = target_binary(&format!("emulator-{}", feature));
+        let output = target_binary("emulator");
         if let Some(parent) = output.parent() {
             std::fs::create_dir_all(parent).ok()?;
         }
@@ -798,7 +808,6 @@ mod test {
     // run_test!(test_mctp_user_loopback, example_app);
     run_test!(test_pldm_discovery);
     run_test!(test_pldm_fw_update);
-    run_test!(test_mctp_spdm_responder_conformance, nightly);
     run_test!(test_doe_spdm_responder_conformance, nightly);
     run_test!(test_doe_spdm_tdisp_ide_validator, nightly);
     run_test!(test_mci, example_app);
@@ -885,8 +894,15 @@ mod test {
         let test_runtime = target_binary(&name);
 
         println!("Compiling test firmware {}", &feature);
-        mcu_builder::runtime_build_with_apps(&[feature], Some(name), true, None, Some(image_svn))
-            .expect("Runtime build failed");
+        mcu_builder::runtime_build_with_apps(
+            &[feature],
+            Some(name),
+            true,
+            None,
+            Some(image_svn),
+            None,
+        )
+        .expect("Runtime build failed");
         assert!(test_runtime.exists());
 
         let fuse_vendor_hashes_prod_partition = {

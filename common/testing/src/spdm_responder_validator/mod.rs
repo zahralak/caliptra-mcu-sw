@@ -8,4 +8,10 @@ mod transport;
 pub enum SpdmTestType {
     SpdmResponderConformance,
     SpdmTeeIoValidator,
+    SpdmAttestation,
 }
+
+pub use common::{
+    execute_spdm_attestation, execute_spdm_responder_validator, SpdmValidatorRunner,
+    SERVER_LISTENING,
+};

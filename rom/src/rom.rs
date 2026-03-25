@@ -64,6 +64,8 @@ pub struct Soc {
 }
 
 impl Soc {
+    pub const BOOT_FSM_DONE: u32 = 4;
+
     pub const fn new(registers: StaticRef<soc::regs::Soc>) -> Self {
         Soc { registers }
     }
@@ -82,6 +84,30 @@ impl Soc {
         self.registers.cptra_flow_status.get()
     }
 
+    pub fn boot_fsm_ps(&self) -> u32 {
+        self.registers
+            .cptra_flow_status
+            .read(soc::bits::CptraFlowStatus::BootFsmPs)
+    }
+
+    pub fn wait_for_bootfsm_done(&self, timeout_cycles: u64) {
+        let start = romtime::mcycle();
+        while self.boot_fsm_ps() != Self::BOOT_FSM_DONE {
+            if self.cptra_fw_fatal_error() {
+                romtime::println!(
+                    "[mcu-rom] Caliptra reported a fatal error during boot FSM transition"
+                );
+                fatal_error(McuError::ROM_SOC_CALIPTRA_FATAL_ERROR_BEFORE_FW_READY);
+            }
+            if romtime::mcycle() - start > timeout_cycles {
+                romtime::println!(
+                    "[mcu-rom] Caliptra Core boot FSM timed out waiting for BOOT_DONE"
+                );
+                fatal_error(McuError::ROM_BOOTFSM_TIMEOUT);
+            }
+        }
+    }
+
     pub fn ready_for_mbox(&self) -> bool {
         self.registers
             .cptra_flow_status
@@ -96,6 +122,18 @@ impl Soc {
 
     pub fn cptra_fw_fatal_error(&self) -> bool {
         self.registers.cptra_fw_error_fatal.get() != 0
+    }
+
+    pub fn check_hw_errors(&self) {
+        let hw_error = self.registers.cptra_hw_error_fatal.extract();
+        if hw_error.is_set(soc::bits::CptraHwErrorFatal::IccmEccUnc) {
+            romtime::println!("[mcu-rom] Caliptra reported an ICCM ECC uncorrectable error");
+            fatal_error(McuError::ROM_SOC_ICCM_ECC_UNC);
+        }
+        if hw_error.is_set(soc::bits::CptraHwErrorFatal::DccmEccUnc) {
+            romtime::println!("[mcu-rom] Caliptra reported a DCCM ECC uncorrectable error");
+            fatal_error(McuError::ROM_SOC_DCCM_ECC_UNC);
+        }
     }
 
     pub fn set_cptra_wdt_cfg(&self, index: usize, value: u32) {
@@ -378,10 +416,35 @@ impl Soc {
                 romtime::println!("[mcu-rom] Caliptra reported a fatal error");
                 fatal_error(McuError::ROM_SOC_CALIPTRA_FATAL_ERROR_BEFORE_FW_READY);
             }
+            self.check_hw_errors();
         }
         // Clear the reset request interrupt
         notif0.modify(mci::bits::Notif0IntrT::NotifCptraMcuResetReqSts::SET);
     }
+
+    /// Configure the Caliptra iTRNG parameters.
+    pub fn configure_itrng(&self, args: CptraItrngArgs) {
+        let bypass_mode = u32::from(args.bypass_mode) << 31;
+        let window_size = u32::from(args.window_size);
+        self.registers.ss_strap_generic[2].set(bypass_mode | window_size);
+        self.registers
+            .cptra_i_trng_entropy_config_0
+            .set(args.config0);
+        self.registers
+            .cptra_i_trng_entropy_config_1
+            .set(args.config1);
+    }
+}
+
+/// Caliptra iTRNG configuration parameters.
+///
+/// See the [spec](https://chipsalliance.github.io/caliptra-web/docs/2.1/firmware/rom_spec.html#entropy-source-configuration-registers)
+/// for more details.
+pub struct CptraItrngArgs {
+    pub bypass_mode: bool,
+    pub window_size: u16,
+    pub config0: u32,
+    pub config1: u32,
 }
 
 /// Number of users supported by the MCU MBOX ACL mechanism.
@@ -635,6 +698,9 @@ pub struct RomParameters<'a> {
     /// Required to use `Otp::compute_sw_digest` and `Otp::write_sw_digest_and_lock`.
     pub otp_digest_iv: Option<u64>,
     pub otp_digest_const: Option<u128>,
+    /// Caliptra entropy bypass mode. See [spec](https://chipsalliance.github.io/caliptra-web/docs/2.1/firmware/rom_spec.html#entropy-source-configuration-registers)
+    /// for more details.
+    pub itrng_entropy_bypass_mode: bool,
 }
 
 #[inline(always)]

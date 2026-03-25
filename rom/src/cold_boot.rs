@@ -27,6 +27,7 @@ use caliptra_api_types::{DeviceLifecycle, SecurityState};
 use core::fmt::Write;
 use core::ops::Deref;
 use mcu_error::McuError;
+use registers_generated::fuses;
 use romtime::{CaliptraSoC, HexWord};
 use tock_registers::interfaces::Readable;
 use zerocopy::{transmute, IntoBytes};
@@ -220,8 +221,24 @@ impl BootFlow for ColdBoot {
         let lc = &env.lc;
         let otp = &mut env.otp;
         let i3c = &mut env.i3c;
-        let i3c_base = env.i3c_base;
+        let i3c1 = &mut env.i3c1;
         let straps = env.straps.deref();
+        if straps.active_i3c > 1 {
+            romtime::println!(
+                "[mcu-rom] WARNING: invalid active_i3c value {}, falling back to 0",
+                straps.active_i3c
+            );
+        }
+        // Select which I3C core to use for recovery based on platform strap.
+        let i3c_base = if straps.active_i3c == 1 {
+            env.i3c1_base
+        } else {
+            env.i3c_base
+        };
+        romtime::println!(
+            "[mcu-rom] Active I3C core for recovery: {}",
+            straps.active_i3c
+        );
 
         romtime::println!("[mcu-rom] Setting Caliptra boot go");
 
@@ -339,7 +356,12 @@ impl BootFlow for ColdBoot {
         mci.set_flow_checkpoint(McuRomBootStatus::WatchdogConfigured.into());
 
         romtime::println!("[mcu-rom] Initializing I3C");
-        i3c.configure(straps.i3c_static_addr, true);
+        if straps.active_i3c == 1 {
+            romtime::println!("[mcu-rom] Initializing I3C1 (active)");
+            i3c1.configure(straps.i3c1_static_addr, true);
+        } else {
+            i3c.configure(straps.i3c_static_addr, true);
+        }
         mci.set_flow_checkpoint(McuRomBootStatus::I3cInitialized.into());
 
         romtime::println!(
@@ -360,6 +382,26 @@ impl BootFlow for ColdBoot {
             dma_user: params.cptra_dma_axi_user,
         });
         mci.set_flow_checkpoint(McuRomBootStatus::AxiUsersConfigured.into());
+
+        // Configure iTRNG
+        let Ok(window_size) = otp.read_entry(fuses::CPTRA_ITRNG_HEALTH_TEST_WINDOW_SIZE) else {
+            romtime::println!("[mcu-rom] Error reading CPTRA_ITRNG_WINDOW_SIZE");
+            fatal_error(McuError::ROM_OTP_READ_CPTRA_ITRNG_WINDOW_SIZE_ERROR);
+        };
+        let Ok(config0) = otp.read_entry(fuses::CPTRA_ITRNG_ENTROPY_CONFIG_0) else {
+            romtime::println!("[mcu-rom] Error reading CPTRA_ITRNG_ENTROPY_CONFIG_0");
+            fatal_error(McuError::ROM_OTP_READ_CPTRA_ITRNG_CONFIG0_ERROR);
+        };
+        let Ok(config1) = otp.read_entry(fuses::CPTRA_ITRNG_ENTROPY_CONFIG_1) else {
+            romtime::println!("[mcu-rom] Error reading CPTRA_ITRNG_ENTROPY_CONFIG_1");
+            fatal_error(McuError::ROM_OTP_READ_CPTRA_ITRNG_CONFIG1_ERROR);
+        };
+        soc.configure_itrng(crate::CptraItrngArgs {
+            bypass_mode: params.itrng_entropy_bypass_mode,
+            window_size: window_size as u16,
+            config0,
+            config1,
+        });
 
         romtime::println!("[mcu-rom] Populating fuses");
         soc.populate_fuses(otp, mci);
@@ -417,12 +459,16 @@ impl BootFlow for ColdBoot {
             while mci.registers.mci_reg_generic_input_wires[1].get() & (1 << 31) == 0 {}
         }
 
+        romtime::println!("[mcu-rom] Waiting for Caliptra Core boot FSM to be DONE");
+        soc.wait_for_bootfsm_done(10_000_000);
+
         romtime::println!("[mcu-rom] Waiting for Caliptra to be ready for mbox",);
         while !soc.ready_for_mbox() {
             if soc.cptra_fw_fatal_error() {
                 romtime::println!("[mcu-rom] Caliptra reported a fatal error");
                 fatal_error(McuError::ROM_COLD_BOOT_CALIPTRA_FATAL_ERROR_BEFORE_MB_READY);
             }
+            soc.check_hw_errors();
         }
 
         romtime::println!("[mcu-rom] Caliptra is ready for mailbox commands",);
@@ -609,7 +655,9 @@ impl BootFlow for ColdBoot {
         romtime::println!(
             "[mcu-rom] Waiting for Caliptra RT to be ready for runtime mailbox commands"
         );
-        while !soc.ready_for_runtime() {}
+        while !soc.ready_for_runtime() {
+            soc.check_hw_errors();
+        }
         mci.set_flow_checkpoint(McuRomBootStatus::CaliptraRuntimeReady.into());
 
         romtime::println!("[mcu-rom] Finished common initialization");
@@ -624,10 +672,18 @@ impl BootFlow for ColdBoot {
 
         if params.recovery_status_open {
             romtime::println!("[mcu-rom] Leaving recovery interface open");
-            env.i3c.set_recovery_status_open();
+            if env.straps.active_i3c == 1 {
+                env.i3c1.set_recovery_status_open();
+            } else {
+                env.i3c.set_recovery_status_open();
+            }
         } else {
             romtime::println!("[mcu-rom] Disabling recovery interface");
-            env.i3c.disable_recovery();
+            if env.straps.active_i3c == 1 {
+                env.i3c1.disable_recovery();
+            } else {
+                env.i3c.disable_recovery();
+            }
         }
 
         // Reset so FirmwareBootReset can jump to firmware

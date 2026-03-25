@@ -1,7 +1,7 @@
 // Licensed under the Apache-2.0 license
 
-use crate::tests::spdm_responder_validator::transport::Transport;
-use mcu_testing_common::MCU_RUNNING;
+use crate::spdm_responder_validator::transport::Transport;
+use crate::MCU_RUNNING;
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::TcpStream;
@@ -16,7 +16,7 @@ pub const SOCKET_SPDM_COMMAND_STOP: u32 = 0xFFFE;
 pub const SOCKET_SPDM_COMMAND_TEST: u32 = 0xDEAD;
 pub const SOCKET_HEADER_LEN: usize = 12;
 
-pub(crate) static SERVER_LISTENING: AtomicBool = AtomicBool::new(false);
+pub static SERVER_LISTENING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 pub struct SpdmSocketHeader {
@@ -277,10 +277,43 @@ pub fn execute_spdm_tee_io_validator(transport: &'static str) {
     });
 }
 
+pub fn execute_spdm_attestation(transport: &'static str) {
+    std::thread::spawn(move || {
+        println!("Starting spdm_requester_emu process. Waiting for SPDM listener to start...");
+        while !SERVER_LISTENING.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+
+        match start_spdm_attestation(transport) {
+            Ok(mut child) => {
+                while MCU_RUNNING.load(Ordering::Relaxed) {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            println!("spdm_requester_emu exited with status: {:?}", status);
+                            break;
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            println!("Error: {:?}", e);
+                            break;
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                let _ = child.kill();
+            }
+            Err(e) => {
+                println!("Error: {:?} Failed to spawn spdm_requester_emu!!", e);
+            }
+        }
+    });
+}
+
 pub fn execute_spdm_responder_validator(transport: &'static str) {
     std::thread::spawn(move || {
         println!(
-            "Starting spdm_device_validator_sample process. Waiting for SPDM listener to start..."
+            "Starting spdm_device_validator_sample process on transport: {}. Waiting for SPDM listener to start...",
+            transport
         );
         while !SERVER_LISTENING.load(Ordering::Relaxed) {
             std::thread::sleep(std::time::Duration::from_millis(200));
@@ -330,6 +363,23 @@ pub fn start_spdm_responder_validator(transport: &'static str) -> io::Result<Chi
                 .arg(transport)
                 .arg("--pcap")
                 .arg("caliptra_spdm_validator.pcap");
+        },
+    )
+}
+
+pub fn start_spdm_attestation(transport: &'static str) -> io::Result<Child> {
+    spawn_validator_binary(
+        "spdm_requester_emu",
+        "spdm_requester_emu_output.txt",
+        |cmd| {
+            println!(
+                "Starting spdm_requester_emu process with transport: {}",
+                transport
+            );
+            cmd.arg("--trans")
+                .arg(transport)
+                .arg("--pcap")
+                .arg("caliptra-evidence.pcap");
         },
     )
 }

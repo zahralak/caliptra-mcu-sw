@@ -48,7 +48,7 @@ mod mcu_mgr;
 mod model_emulated;
 #[cfg(feature = "fpga_realtime")]
 mod model_fpga_realtime;
-mod otp_provision;
+pub mod otp_provision;
 mod vmem;
 
 pub enum ShaAccMode {
@@ -222,6 +222,8 @@ pub struct InitParams<'a> {
     pub caliptra_soc_axi_user: Option<u32>,
 
     pub flash_boot: bool,
+
+    pub active_i3c1: bool,
 }
 
 impl InitParams<'_> {
@@ -292,6 +294,7 @@ impl Default for InitParams<'_> {
             check_booted_to_runtime: true,
             caliptra_soc_axi_user: None,
             flash_boot: false,
+            active_i3c1: false,
         }
     }
 }
@@ -888,6 +891,7 @@ mod tests {
             let rom_file = mcu_builder::test_rom_build(
                 Some(platform()),
                 &firmware::hw_model_tests::MAILBOX_RESPONDER,
+                None,
             )?;
             std::fs::read(&rom_file)?
         };

@@ -74,6 +74,10 @@ add_files $ssrtlDir/src/integration/testbench/prim_generic_otp.sv
 add_files [ glob $ssrtlDir/src/*/rtl/*.svh ]
 add_files [ glob $ssrtlDir/src/*/rtl/*.sv ]
 
+# CDC synchronizer library (Xilinx XPM-based)
+add_files $ssrtlDir/src/Common/BasicComponents/src/xilinx/sync_regs.sv
+add_files $ssrtlDir/src/Common/BasicComponents/src/xilinx/reset_synchronizer.sv
+
 # I3C
 set i3cDir $ssrtlDir/third_party/i3c-core
 # Include headers and packages first

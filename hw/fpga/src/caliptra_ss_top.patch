@@ -10,96 +10,105 @@
 39a47,48
 >     // TODO: Hacking in this i3c clock
 >     input logic cptra_i3c_clk_i,
-895c904,959
-<     
----
+895a905,973
+>     // CDC: Synchronize reset from SS clock domain to I3C clock domain
+>     // Reset asserts asynchronously, deasserts synchronously to cptra_i3c_clk_i
 >     logic i3c_rst_sync;
->     xpm_cdc_async_rst #(
->     .DEST_SYNC_FF(4),    // DECIMAL; range: 2-10
->     .INIT_SYNC_FF(0),    // DECIMAL; 0=disable simulation init values, 1=enable simulation init values
->     .RST_ACTIVE_HIGH(0)  // DECIMAL; 0=active low reset, 1=active high reset
->     )
->     xpm_cdc_i3c_rst (
->     .dest_arst(i3c_rst_sync), // 1-bit output: src_arst asynchronous reset signal synchronized to destination
->                             // clock domain. This output is registered. NOTE: Signal asserts asynchronously
->                             // but deasserts synchronously to dest_clk. Width of the reset signal is at least
->                             // (DEST_SYNC_FF*dest_clk) period.
-> 
->     .dest_clk(cptra_i3c_clk_i),   // 1-bit input: Destination clock.
->     .src_arst(cptra_ss_rst_b_o)    // 1-bit input: Source asynchronous reset signal.
+>     reset_synchronizer #(
+>         .DEPTH           (4),
+>         .RST_ACTIVE_HIGH (0)  // cptra_ss_rst_b_o is active-low
+>     ) sync_i3c_rst (
+>         .clk       (cptra_i3c_clk_i),
+>         .arst      (cptra_ss_rst_b_o),
+>         .arst_sync (i3c_rst_sync)
 >     );
 > 
->     // I3C CLK -> SS CLK
+>     // CDC: I3C CLK -> SS CLK (5-bit: recovery/reset/irq status signals)
 >     logic cptra_ss_i3c_recovery_payload_available_o_presync;
 >     logic cptra_ss_i3c_recovery_image_activated_o_presync;
 >     logic i3c_peripheral_reset_presync;
 >     logic i3c_escalated_reset_presync;
 >     logic i3c_irq_o_presync;
->     xpm_cdc_array_single #(
->     .DEST_SYNC_FF(4),   // DECIMAL; range: 2-10
->     .INIT_SYNC_FF(0),   // DECIMAL; 0=disable simulation init values, 1=enable simulation init values
->     .SIM_ASSERT_CHK(0), // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
->     .SRC_INPUT_REG(1),  // DECIMAL; 0=do not register input, 1=register input
->     .WIDTH(5)         // DECIMAL; range: 1-1024
->     )
->     xpm_cdc_i3c_outputs_inst (
->     .src_clk(cptra_i3c_clk_i),  // 1-bit input: optional; required when SRC_INPUT_REG = 1
->     .dest_clk(cptra_ss_clk_i), // 1-bit input: Clock signal for the destination clock domain.
-> 
->     .src_in(  {cptra_ss_i3c_recovery_payload_available_o_presync, cptra_ss_i3c_recovery_image_activated_o_presync, i3c_peripheral_reset_presync, i3c_escalated_reset_presync, i3c_irq_o_presync}),
->     .dest_out({cptra_ss_i3c_recovery_payload_available_o,         cptra_ss_i3c_recovery_image_activated_o,         i3c_peripheral_reset,         i3c_escalated_reset,         i3c_irq_o})
+>     sync_regs #(
+>         .WIDTH (5),
+>         .DEPTH (4)
+>     ) sync_i3c_outputs (
+>         .clk  (cptra_ss_clk_i),
+>         .din  ({cptra_ss_i3c_recovery_payload_available_o_presync, cptra_ss_i3c_recovery_image_activated_o_presync, i3c_peripheral_reset_presync, i3c_escalated_reset_presync, i3c_irq_o_presync}),
+>         .dout ({cptra_ss_i3c_recovery_payload_available_o,         cptra_ss_i3c_recovery_image_activated_o,         i3c_peripheral_reset,         i3c_escalated_reset,         i3c_irq_o})
 >     );
 > 
->     // SS CLK -> I3C CLK
+>     // CDC: SS CLK -> I3C CLK (65-bit: AXI user straps + ID filtering config)
+>     // These are quasi-static configuration signals set once at boot.
 >     logic [31:0]  cptra_ss_strap_caliptra_dma_axi_user_i_synch;
 >     logic [31:0] cptra_ss_strap_mcu_lsu_axi_user_i_synch;
 >     logic disable_id_filtering_i_synch;
->     xpm_cdc_array_single #(
->         .DEST_SYNC_FF(4),   // DECIMAL; range: 2-10
->         .INIT_SYNC_FF(0),   // DECIMAL; 0=disable simulation init values, 1=enable simulation init values
->         .SIM_ASSERT_CHK(0), // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
->         .SRC_INPUT_REG(1),  // DECIMAL; 0=do not register input, 1=register input
->         .WIDTH(65)         // DECIMAL; range: 1-1024
->     )
->     xpm_cdc_i3c_inputs_inst (
->         .src_clk(cptra_ss_clk_i),  // 1-bit input: optional; required when SRC_INPUT_REG = 1
->         .dest_clk(cptra_i3c_clk_i), // 1-bit input: Clock signal for the destination clock domain.
-> 
->         .src_in(  {cptra_ss_strap_caliptra_dma_axi_user_i,       cptra_ss_strap_mcu_lsu_axi_user_i,       disable_id_filtering_i}),
->         .dest_out({cptra_ss_strap_caliptra_dma_axi_user_i_synch, cptra_ss_strap_mcu_lsu_axi_user_i_synch, disable_id_filtering_i_synch})
+>     sync_regs #(
+>         .WIDTH (65),
+>         .DEPTH (4)
+>     ) sync_i3c_inputs (
+>         .clk  (cptra_i3c_clk_i),
+>         .din  ({cptra_ss_strap_caliptra_dma_axi_user_i,       cptra_ss_strap_mcu_lsu_axi_user_i,       disable_id_filtering_i}),
+>         .dout ({cptra_ss_strap_caliptra_dma_axi_user_i_synch, cptra_ss_strap_mcu_lsu_axi_user_i_synch, disable_id_filtering_i_synch})
 >     );
 > 
-898,899c962,963
+> 
+> 
+>     );
+>         .dout ({cptra_ss_i3c_recovery_payload_available_o,         cptra_ss_i3c_recovery_image_activated_o,         i3c_peripheral_reset,         i3c_escalated_reset,         i3c_irq_o})
+>         .din  ({cptra_ss_i3c_recovery_payload_available_o_presync, cptra_ss_i3c_recovery_image_activated_o_presync, i3c_peripheral_reset_presync, i3c_escalated_reset_presync, i3c_irq_o_presync}),
+>         .clk  (cptra_ss_clk_i),
+>     ) sync_i3c_outputs (
+>         .DEPTH (4)
+>         .WIDTH (5),
+>     sync_regs #(
+>     logic i3c_irq_o_presync;
+>     logic i3c_escalated_reset_presync;
+>     logic i3c_peripheral_reset_presync;
+>     logic cptra_ss_i3c_recovery_image_activated_o_presync;
+>     logic cptra_ss_i3c_recovery_payload_available_o_presync;
+>     // CDC: I3C CLK -> SS CLK (5-bit: recovery/reset/irq status signals)
+> 
+>     );
+>         .arst_sync (i3c_rst_sync)
+>         .arst      (cptra_ss_rst_b_o),
+>         .clk       (cptra_i3c_clk_i),
+>     ) sync_i3c_rst (
+>         .RST_ACTIVE_HIGH (0)  // cptra_ss_rst_b_o is active-low
+>         .DEPTH           (4),
+>     reset_synchronizer #(
+>     logic i3c_rst_sync;
+>     // Reset asserts asynchronously, deasserts synchronously to cptra_i3c_clk_i
+>     // CDC: Synchronize reset from SS clock domain to I3C clock domain
+898,899c976,977
 <     assign priv_ids[2] = cptra_ss_strap_caliptra_dma_axi_user_i;
 <     assign priv_ids[3] = cptra_ss_strap_mcu_lsu_axi_user_i;
 ---
 >     assign priv_ids[2] = cptra_ss_strap_caliptra_dma_axi_user_i_synch;
 >     assign priv_ids[3] = cptra_ss_strap_mcu_lsu_axi_user_i_synch;
-909,911c973,975
+909,910c987,988
 <         .clk_i                          (cptra_ss_clk_i),
 <         .rst_ni                         (cptra_ss_rst_b_o),
-<     
 ---
->         .clk_i                          (cptra_i3c_clk_i),
->         .rst_ni                         (i3c_rst_sync),
-> 
-969,971c1033,1035
+>         .clk_i (cptra_i3c_clk_i),
+>         .rst_ni(i3c_rst_sync),
+969,971c1047,1049
 <         .recovery_payload_available_o   (cptra_ss_i3c_recovery_payload_available_o),
 <         .recovery_image_activated_o     (cptra_ss_i3c_recovery_image_activated_o),
 <         .peripheral_reset_o             (i3c_peripheral_reset),
 ---
->         .recovery_payload_available_o   (cptra_ss_i3c_recovery_payload_available_o_presync),
->         .recovery_image_activated_o     (cptra_ss_i3c_recovery_image_activated_o_presync),
->         .peripheral_reset_o             (i3c_peripheral_reset_presync),
-973c1037
+>         .recovery_payload_available_o(cptra_ss_i3c_recovery_payload_available_o_presync),
+>         .recovery_image_activated_o(cptra_ss_i3c_recovery_image_activated_o_presync),
+>         .peripheral_reset_o(i3c_peripheral_reset_presync),
+973c1051
 <         .escalated_reset_o              (i3c_escalated_reset),
 ---
->         .escalated_reset_o              (i3c_escalated_reset_presync),
-976c1040
+>         .escalated_reset_o(i3c_escalated_reset_presync),
+976c1054
 <         .irq_o                          (i3c_irq_o),
 ---
 >         .irq_o                          (i3c_irq_o_presync),
-979c1043
+979c1057
 <         .disable_id_filtering_i         (disable_id_filtering_i),
 ---
 >         .disable_id_filtering_i         (disable_id_filtering_i_synch),

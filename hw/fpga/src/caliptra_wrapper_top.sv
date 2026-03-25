@@ -93,7 +93,7 @@ module caliptra_wrapper_top (
     output  wire M_AXI_CALIPTRA_WLAST,
     // B
     input wire [1:0] M_AXI_CALIPTRA_BRESP,
-    input reg  [15:0] M_AXI_CALIPTRA_BID,
+    input wire [15:0] M_AXI_CALIPTRA_BID,
     input wire M_AXI_CALIPTRA_BVALID,
     output  wire M_AXI_CALIPTRA_BREADY,
     // AR
@@ -109,7 +109,7 @@ module caliptra_wrapper_top (
     // R
     input wire [31:0] M_AXI_CALIPTRA_RDATA,
     input wire [1:0] M_AXI_CALIPTRA_RRESP,
-    input reg  [15:0] M_AXI_CALIPTRA_RID,
+    input wire [15:0] M_AXI_CALIPTRA_RID,
     input wire M_AXI_CALIPTRA_RLAST,
     input wire M_AXI_CALIPTRA_RVALID,
     output  wire M_AXI_CALIPTRA_RREADY,
@@ -1993,6 +1993,31 @@ mcu_rom (
 
     // Spare I3C core
     logic spare_i3c_irq_o;
+    logic spare_i3c_irq_o_presync;
+    logic spare_i3c_recovery_payload_available_presync;
+    logic spare_i3c_recovery_image_activated_presync;
+
+    // CDC: Synchronize spare I3C reset from core_clk to i3c_clk domain
+    logic spare_i3c_rst_sync;
+    reset_synchronizer #(
+        .DEPTH           (4),
+        .RST_ACTIVE_HIGH (0)
+    ) sync_spare_i3c_rst (
+        .clk       (i3c_clk),
+        .arst      (axi_reset),
+        .arst_sync (spare_i3c_rst_sync)
+    );
+
+    // CDC: Synchronize spare I3C outputs from i3c_clk to core_clk domain
+    sync_regs #(
+        .WIDTH (3),
+        .DEPTH (4)
+    ) sync_spare_i3c_outputs (
+        .clk  (core_clk),
+        .din  ({spare_i3c_irq_o_presync, spare_i3c_recovery_payload_available_presync, spare_i3c_recovery_image_activated_presync}),
+        .dout ({spare_i3c_irq_o,         hwif_in.interface_regs.spare_i3c_control_sts.recovery_payload_available_o.next, hwif_in.interface_regs.spare_i3c_control_sts.recovery_image_activated_o.next})
+    );
+
     assign hwif_in.interface_regs.spare_i3c_control_sts.irq_o.next = spare_i3c_irq_o;
 
     logic [31:0] priv_ids [4];
@@ -2008,8 +2033,8 @@ mcu_rom (
         .AxiIdWidth  (8)
     ) i3c (
         .clk_i                          (i3c_clk),
-        .rst_ni                         (axi_reset),
-    
+        .rst_ni                         (spare_i3c_rst_sync),
+
         // Read Address Channel
         .arvalid_i   (S_AXI_I3C_SPARE_ARVALID),
         .arready_o   (S_AXI_I3C_SPARE_ARREADY),
@@ -2054,7 +2079,7 @@ mcu_rom (
         .bresp_o     (S_AXI_I3C_SPARE_BRESP),
         .bid_o       (S_AXI_I3C_SPARE_BID),
         .buser_o     (/* ??? see note below */),
-    
+
         // I3C Signals
         .scl_i                          (spare_i3c_core_scl),
         .sda_i                          (SDA),
@@ -2062,23 +2087,27 @@ mcu_rom (
         .sda_o                          (spare_i3c_core_sda_o),
         .scl_oe                         (),
         .sda_oe                         (),
-    
+
         // Additional signals
         .sel_od_pp_o                    (spare_i3c_core_sel_od_pp_o),
 
-        .recovery_payload_available_o   (hwif_in.interface_regs.spare_i3c_control_sts.recovery_payload_available_o.next),
-        .recovery_image_activated_o     (hwif_in.interface_regs.spare_i3c_control_sts.recovery_image_activated_o.next),
+        .recovery_payload_available_o   (spare_i3c_recovery_payload_available_presync),
+        .recovery_image_activated_o     (spare_i3c_recovery_image_activated_presync),
         .peripheral_reset_o             (),
         .peripheral_reset_done_i        (1'b1),
         .escalated_reset_o              (),
 
         // Interrupts
-        .irq_o                          (spare_i3c_irq_o),
+        .irq_o                          (spare_i3c_irq_o_presync),
 
         // id filtering
         .disable_id_filtering_i         (1'b1),
-        .priv_ids_i                     (priv_ids)    
+        .priv_ids_i                     (priv_ids)
     );
+
+// Reset for SRAM interfaces (previously implicit undriven wire)
+logic rst_l;
+assign rst_l = hwif_out.interface_regs.control.cptra_ss_rst_b.value;
 
 // Looping back resets
 logic cptra_rst_b;

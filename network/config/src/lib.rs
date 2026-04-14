@@ -99,21 +99,21 @@ pub struct NetworkMemoryMap {
 impl Default for NetworkMemoryMap {
     fn default() -> Self {
         NetworkMemoryMap {
-            // ROM at address 0x0 (64KB)
-            rom_offset: 0x0000_0000,
+            // ROM at 0x9000_0000 (64KB) — matches NWP VeeR reset vector
+            rom_offset: 0x9000_0000,
             rom_size: 64 * 1024,
-            rom_stack_size: 0x8000, // 32KB stack
+            rom_stack_size: 0x2000, // 8KB stack (fits in 16KB DCCM)
             rom_estack_size: 0x200, // 512B exception stack
             rom_properties: MemoryRegionType::MEMORY,
 
-            // ICCM at 0x4000_0000 (128KB)
-            iccm_offset: 0x4000_0000,
-            iccm_size: 128 * 1024,
+            // ICCM at 0xC000_0000 (disabled in hardware)
+            iccm_offset: 0xC000_0000,
+            iccm_size: 0,
             iccm_properties: MemoryRegionType::MEMORY,
 
-            // DCCM at 0x5000_0000 (64KB)
-            dccm_offset: 0x5000_0000,
-            dccm_size: 64 * 1024,
+            // DCCM at 0x3000_0000 (16KB) — matches NWP VeeR DCCM
+            dccm_offset: 0x3000_0000,
+            dccm_size: 16 * 1024,
             dccm_properties: MemoryRegionType::MEMORY,
 
             // UART for debug output
@@ -126,8 +126,8 @@ impl Default for NetworkMemoryMap {
             ctrl_size: 0x4,
             ctrl_properties: MemoryRegionType::MMIO,
 
-            // PIC
-            pic_offset: 0x6000_0000,
+            // PIC at 0xB000_0000 — matches NWP VeeR PIC
+            pic_offset: 0xB000_0000,
             pic_size: 0x5400,
             pic_properties: MemoryRegionType::MMIO,
         }
@@ -280,18 +280,18 @@ impl NetworkMemoryMap {
 
 /// Default Network Coprocessor memory map for the emulator
 pub const DEFAULT_NETWORK_MEMORY_MAP: NetworkMemoryMap = NetworkMemoryMap {
-    rom_offset: 0x0000_0000,
+    rom_offset: 0x9000_0000,
     rom_size: 64 * 1024,
-    rom_stack_size: 0x8000,
+    rom_stack_size: 0x2000, // 8KB stack (fits in 16KB DCCM)
     rom_estack_size: 0x200,
     rom_properties: MemoryRegionType::MEMORY,
 
-    iccm_offset: 0x4000_0000,
-    iccm_size: 128 * 1024,
+    iccm_offset: 0xC000_0000,
+    iccm_size: 0,
     iccm_properties: MemoryRegionType::MEMORY,
 
-    dccm_offset: 0x5000_0000,
-    dccm_size: 64 * 1024,
+    dccm_offset: 0x3000_0000,
+    dccm_size: 16 * 1024,
     dccm_properties: MemoryRegionType::MEMORY,
 
     uart_offset: 0x1000_1000,
@@ -302,7 +302,7 @@ pub const DEFAULT_NETWORK_MEMORY_MAP: NetworkMemoryMap = NetworkMemoryMap {
     ctrl_size: 0x4,
     ctrl_properties: MemoryRegionType::MMIO,
 
-    pic_offset: 0x6000_0000,
+    pic_offset: 0xB000_0000,
     pic_size: 0x5400,
     pic_properties: MemoryRegionType::MMIO,
 };
@@ -314,12 +314,13 @@ mod tests {
     #[test]
     fn test_default_memory_map() {
         let map = NetworkMemoryMap::default();
-        assert_eq!(map.rom_offset, 0x0000_0000);
+        assert_eq!(map.rom_offset, 0x9000_0000);
         assert_eq!(map.rom_size, 64 * 1024);
-        assert_eq!(map.iccm_offset, 0x4000_0000);
-        assert_eq!(map.iccm_size, 128 * 1024);
-        assert_eq!(map.dccm_offset, 0x5000_0000);
-        assert_eq!(map.dccm_size, 64 * 1024);
+        assert_eq!(map.iccm_offset, 0xC000_0000);
+        assert_eq!(map.iccm_size, 0);
+        assert_eq!(map.dccm_offset, 0x3000_0000);
+        assert_eq!(map.dccm_size, 16 * 1024);
+        assert_eq!(map.pic_offset, 0xB000_0000);
     }
 
     #[test]
@@ -331,13 +332,20 @@ mod tests {
         assert_ne!(mrac_value, 0);
         assert_ne!(mrac_value, 0xffffffff);
 
-        // Region 0 (ROM at 0x0) should be cacheable (01)
-        let region_0_bits = mrac_value & 0x3;
-        assert_eq!(region_0_bits, 0x1, "ROM region should be cacheable (01)");
+        // Region 9 (ROM at 0x9000_0000) should be cacheable (01)
+        let region_9_bits = (mrac_value >> (9 * 2)) & 0x3;
+        assert_eq!(region_9_bits, 0x1, "ROM region should be cacheable (01)");
 
-        // Region 4 (ICCM at 0x4000_0000) should be cacheable (01)
-        let region_4_bits = (mrac_value >> (4 * 2)) & 0x3;
-        assert_eq!(region_4_bits, 0x1, "ICCM region should be cacheable (01)");
+        // Region 3 (DCCM at 0x3000_0000) should be cacheable (01)
+        let region_3_bits = (mrac_value >> (3 * 2)) & 0x3;
+        assert_eq!(region_3_bits, 0x1, "DCCM region should be cacheable (01)");
+
+        // Region 11 (PIC at 0xB000_0000) should have side effects (10)
+        let region_11_bits = (mrac_value >> (11 * 2)) & 0x3;
+        assert_eq!(
+            region_11_bits, 0x2,
+            "PIC region should have side effects (10)"
+        );
 
         // Region 1 (UART at 0x1000_1000) should have side effects (10)
         let region_1_bits = (mrac_value >> 2) & 0x3;
@@ -354,11 +362,11 @@ mod tests {
         let memory_map = NetworkMemoryMap::default();
         let hash_map = memory_map.hash_map();
 
-        assert_eq!(hash_map.get("ROM_OFFSET").unwrap(), "0x0");
+        assert_eq!(hash_map.get("ROM_OFFSET").unwrap(), "0x90000000");
         assert_eq!(hash_map.get("ROM_SIZE").unwrap(), "0x10000");
-        assert_eq!(hash_map.get("ICCM_OFFSET").unwrap(), "0x40000000");
-        assert_eq!(hash_map.get("ICCM_SIZE").unwrap(), "0x20000");
-        assert_eq!(hash_map.get("DCCM_OFFSET").unwrap(), "0x50000000");
-        assert_eq!(hash_map.get("DCCM_SIZE").unwrap(), "0x10000");
+        assert_eq!(hash_map.get("ICCM_OFFSET").unwrap(), "0xc0000000");
+        assert_eq!(hash_map.get("ICCM_SIZE").unwrap(), "0x0");
+        assert_eq!(hash_map.get("DCCM_OFFSET").unwrap(), "0x30000000");
+        assert_eq!(hash_map.get("DCCM_SIZE").unwrap(), "0x4000");
     }
 }

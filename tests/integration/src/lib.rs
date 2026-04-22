@@ -65,6 +65,7 @@ mod test {
         pub dot_flash_initial_contents: Option<Vec<u8>>,
         pub rom_only: bool,
         pub include_network_rom: bool,
+        pub network_feature: Option<&'a str>,
         pub flash_boot: bool,
         /// If true, set the DOT initialized fuse to enable DOT flow
         pub dot_enabled: bool,
@@ -276,7 +277,7 @@ mod test {
         let mcu_runtime = std::fs::read(mcu_runtime).unwrap();
 
         // Network ROM is optional - build it if the build system supports it
-        let network_rom = match mcu_builder::network_rom_build(None) {
+        let network_rom = match mcu_builder::network_rom_build(params.network_feature) {
             Ok(path) => std::fs::read(path).unwrap_or_default(),
             Err(_) => Vec::new(),
         };

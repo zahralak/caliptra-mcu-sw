@@ -13,15 +13,16 @@ Abstract:
 --*/
 
 .option norvc
+.option norelax
+
+# Constants (assembler equates — no bytes emitted)
+.equ  EMU_CTRL_EXIT, 0x10002000
 
 .section .text.init
 .global _start
 _start:
 
-.option push
-.option norelax
     la gp, GLOBAL_POINTER
-.option pop
 
     # Initialize the stack pointer
     la sp, STACK_TOP
@@ -63,28 +64,26 @@ end_copy_data:
     call main
 
     # If main returns, exit the emulator
-    la t0, EMU_CTRL_EXIT
+    li t0, EMU_CTRL_EXIT
     sw zero, 0(t0)
-    
+
     # Infinite loop (should never reach here)
 1:  j 1b
 
-.section .data
-.equ  EMU_CTRL_EXIT, 0x10002000
-
-.section .text.init
-.align 2
+# Exception handler entry point — must be 4-byte aligned for mtvec direct mode.
+# mtvec bits [1:0] are the mode field; the handler address must have bits [1:0] = 0.
+.p2align 2
 _exception_handler:
     # Save the SP to mscratch
     csrw mscratch, sp
-    
+
     # Use a simple exception stack (reuse main stack for simplicity)
     la sp, STACK_TOP
     addi sp, sp, -64
 
-    # Call the exception handler function
+    # Call the exception handler function (never returns — matches MCU ROM pattern)
     jal exception_handler
 
-    # Restore SP and return (though we likely won't return)
-    csrr sp, mscratch
-    mret
+    # Unreachable: exception_handler is -> ! (divergent)
+    # If it somehow returns, loop forever
+1:  j 1b

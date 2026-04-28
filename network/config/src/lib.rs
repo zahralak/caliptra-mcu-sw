@@ -102,7 +102,7 @@ impl Default for NetworkMemoryMap {
             // ROM at 0x9000_0000 (64KB) — matches NWP VeeR reset vector
             rom_offset: 0x9000_0000,
             rom_size: 64 * 1024,
-            rom_stack_size: 0x2000, // 8KB stack (fits in 64KB DCCM)
+            rom_stack_size: 0x3000, // 12KB stack (fits in 64KB DCCM)
             rom_estack_size: 0x200, // 512B exception stack
             rom_properties: MemoryRegionType::MEMORY,
 
@@ -282,7 +282,7 @@ impl NetworkMemoryMap {
 pub const DEFAULT_NETWORK_MEMORY_MAP: NetworkMemoryMap = NetworkMemoryMap {
     rom_offset: 0x9000_0000,
     rom_size: 64 * 1024,
-    rom_stack_size: 0x2000, // 8KB stack (fits in 64KB DCCM)
+    rom_stack_size: 0x3000, // 12KB stack (fits in 64KB DCCM)
     rom_estack_size: 0x200,
     rom_properties: MemoryRegionType::MEMORY,
 

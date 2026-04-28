@@ -102,7 +102,7 @@ impl Default for NetworkMemoryMap {
             // ROM at 0x9000_0000 (64KB) — matches NWP VeeR reset vector
             rom_offset: 0x9000_0000,
             rom_size: 64 * 1024,
-            rom_stack_size: 0x2000, // 8KB stack (fits in 16KB DCCM)
+            rom_stack_size: 0x2000, // 8KB stack (fits in 64KB DCCM)
             rom_estack_size: 0x200, // 512B exception stack
             rom_properties: MemoryRegionType::MEMORY,
 
@@ -111,9 +111,9 @@ impl Default for NetworkMemoryMap {
             iccm_size: 0,
             iccm_properties: MemoryRegionType::MEMORY,
 
-            // DCCM at 0x3000_0000 (16KB) — matches NWP VeeR DCCM
+            // DCCM at 0x3000_0000 (64KB) — matches NWP VeeR DCCM
             dccm_offset: 0x3000_0000,
-            dccm_size: 16 * 1024,
+            dccm_size: 64 * 1024,
             dccm_properties: MemoryRegionType::MEMORY,
 
             // UART for debug output
@@ -282,7 +282,7 @@ impl NetworkMemoryMap {
 pub const DEFAULT_NETWORK_MEMORY_MAP: NetworkMemoryMap = NetworkMemoryMap {
     rom_offset: 0x9000_0000,
     rom_size: 64 * 1024,
-    rom_stack_size: 0x2000, // 8KB stack (fits in 16KB DCCM)
+    rom_stack_size: 0x2000, // 8KB stack (fits in 64KB DCCM)
     rom_estack_size: 0x200,
     rom_properties: MemoryRegionType::MEMORY,
 
@@ -291,7 +291,7 @@ pub const DEFAULT_NETWORK_MEMORY_MAP: NetworkMemoryMap = NetworkMemoryMap {
     iccm_properties: MemoryRegionType::MEMORY,
 
     dccm_offset: 0x3000_0000,
-    dccm_size: 16 * 1024,
+    dccm_size: 64 * 1024,
     dccm_properties: MemoryRegionType::MEMORY,
 
     uart_offset: 0x1000_1000,
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(map.iccm_offset, 0xC000_0000);
         assert_eq!(map.iccm_size, 0);
         assert_eq!(map.dccm_offset, 0x3000_0000);
-        assert_eq!(map.dccm_size, 16 * 1024);
+        assert_eq!(map.dccm_size, 64 * 1024);
         assert_eq!(map.pic_offset, 0xB000_0000);
     }
 
@@ -367,6 +367,6 @@ mod tests {
         assert_eq!(hash_map.get("ICCM_OFFSET").unwrap(), "0xc0000000");
         assert_eq!(hash_map.get("ICCM_SIZE").unwrap(), "0x0");
         assert_eq!(hash_map.get("DCCM_OFFSET").unwrap(), "0x30000000");
-        assert_eq!(hash_map.get("DCCM_SIZE").unwrap(), "0x4000");
+        assert_eq!(hash_map.get("DCCM_SIZE").unwrap(), "0x10000");
     }
 }
